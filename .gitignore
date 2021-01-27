@@ -35,5 +35,9 @@ vignettes/*.pdf
 *.utf8.md
 *.knit.md
 
-# R Environment Variables
-.Renviron
+# Ignore data and illustrations
+/data/
+/img/
+
+# Ignore intermediate plots
+/plots/dev/
