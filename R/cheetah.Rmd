@@ -1,5 +1,5 @@
 ---
-    title: "Cheetah Map"
+title: "Cheetah Map"
 description: |
     A Contribution to the BES Movement "MoveMap" Competition 2021.
 author:
@@ -38,53 +38,37 @@ library(colorspace)
 
 ## Data
 
+```{r prep-data}
+proj <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
+```
+
+
 ### Communication Hubs
 
 ```{r data-hubs}
 ## 0 Communication hub borders
 path <- here("data", "0 Communication hub borders")
 
-proj <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
-
 ## KDE's from Jörg
-sf_p_kde50 <- st_read(dsn = glue("{path}/P hub Mont/KDE50/P068kde50_tgf.shp")) %>% 
+sf_kde50 <- st_read(dsn = glue("{path}/KDE50/P068kde50_tgf.shp")) %>% 
   st_transform(crs = proj)
-sf_p_kde95 <- st_read(dsn = glue("{path}/P hub Mont/KDE95/P068kde95_tgf.shp")) %>% 
+sf_kde95 <- st_read(dsn = glue("{path}/KDE95/P068kde95_tgf.shp")) %>% 
   st_transform(crs = proj)
 
-terri <- read_csv(glue("{path}/Terri raw data/Zander P068/P068_tgf.csv")) %>%  #P068-2053 / P068_tgf
-  #bind_rows(read_csv(glue("{path}/Terri raw data/Zander P144/P144_tgf.csv"))) %>% 
-  #filter(lubridate::year(timestamp) != 2017) %>% 
-  dplyr::select(`location.long`, `location.lat`) %>% 
-  #dplyr::select(`location-long`, `location-lat`) %>% 
-  #filter(!is.na(`location-long`), !is.na(`location-lat`)) %>% 
-  SpatialPoints()
-
-proj4string(terri) = CRS(proj)
-ud <- kernelUD(terri, extent = .1)
-
-vers <- function(r) {
-  getverticeshr(ud, r, unout = "km2") %>% 
-    st_as_sf() #%>% st_transform(crs = proj)
-}
-
-kdes <- map_df(rev(seq(50, 95, by = 5)), vers)
-
-
-
-################################################################################
-
-
-
-
-#### Terri raw
-sf_p068 <- read_csv(glue("{path}/Terri raw data/Zander P068/P068_tgf.csv")) %>% 
-  st_as_sf(coords = c("location.long", "location.lat"), crs = "WGS 84") %>% 
-  dplyr::select(event.id, timestamp, X.CRP, Y.CRP)
-  
-kde_p068 <- read_csv(glue("{path}/Terri raw data/Zander P068/P068_tgf.csv")) %>% 
-  amt::make_track(`location.long`, `location.lat`, timestamp) %>% 
-  amt::hr_kde(levels = c(.05, .25, .5, .75, .95, 1))
+## Calculate KDEs new
+# terri <- read_csv(glue("{path}/Terri raw data/P068_tgf.csv")) %>% 
+#   dplyr::select(`location.long`, `location.lat`) %>% 
+#   SpatialPoints()
+# 
+# proj4string(terri) = CRS(proj)
+# ud <- kernelUD(terri, extent = .1)
+# 
+# vers <- function(r) {
+#   getverticeshr(ud, r, unout = "km2") %>% 
+#     st_as_sf() 
+# }
+# 
+# kdes <- map_df(rev(seq(50, 95, by = 5)), vers)
 ```
 
 ### Trees
@@ -100,37 +84,37 @@ sf_trees <- st_read(dsn = here("data", "1 marking trees", "mt_201022.shp")) %>%
 ```{r data-floaters}
 ## 2 floaters
 ids <- 
-    list.files(path = here("data", "2 floaters"), full.names = FALSE, recursive = TRUE) %>% 
-    as_tibble() %>% 
-    filter(str_detect(value, "Floaters")) %>% 
-    mutate(
-        ## remove file format
-        id = str_remove(value, ".csv"), 
-        ## remove folder info
-        id = str_extract(id, "[^\\/]+$"),
-        ## remove "(1)"
-        id = str_remove(id, "\\s[^ ]+$"),
-        hub = str_extract(id, "[A-Z]"),
-        filename = as.character(1:n())
-    ) %>% 
-    dplyr::select(-value)
+  list.files(path = here("data", "2 floaters"), full.names = FALSE) %>% 
+  as_tibble() %>% 
+  mutate(
+    ## remove file format
+    id = str_remove(value, ".csv"), 
+    filename = as.character(1:n())
+  ) %>% 
+  dplyr::select(-value)
 
 df_floaters <- 
-    list.files(path = here("data", "2 floaters"), pattern = "",
-               full.names = TRUE, recursive = TRUE) %>%
-    map_dfr(read_csv, .id = "filename") %>% 
-    janitor::clean_names() %>% 
-    left_join(ids) %>% 
-    filter(!is.na(id)) %>% 
-    dplyr::select(id, hub, event_id:location_lat, 
-                  tag_local_identifier, individual_local_identifier) %>% 
-    group_by(id) %>% 
-    mutate(step = 1:n())
+  list.files(path = here("data", "2 floaters"), full.names = TRUE) %>%
+  map_dfr(read_csv, .id = "filename") %>% 
+  janitor::clean_names() %>% 
+  left_join(ids) %>% 
+  dplyr::select(id, event_id:location_lat, 
+                tag_local_identifier, individual_local_identifier) %>% 
+  group_by(id) %>% 
+  mutate(step = 1:n())
 
 sf_floaters <- 
-    df_floaters %>% 
-    filter(!is.na(location_long), !is.na(location_lat)) %>% 
-    st_as_sf(coords = c("location_long", "location_lat"), crs = proj)
+  df_floaters %>% 
+  filter(
+    !is.na(location_long), !is.na(location_lat),
+    id %in% c("P151-5552", "P152-7077", "P153-7417"), #"P150-6409", "P155-3534"
+  ) %>% 
+  mutate(
+    year = lubridate::year(timestamp), 
+    month = lubridate::month(timestamp),
+    yday = lubridate::yday(timestamp)
+  ) %>% 
+  st_as_sf(coords = c("location_long", "location_lat"), crs = proj)
 ```
 
 ```{r images}
@@ -140,19 +124,25 @@ img_tree <- grid::rasterGrob(png::readPNG(here("img", "tree.png")), interpolate 
 
 ## Map P Hub
 
-```{r map}
-sf_p <- sf_floaters %>% 
-  mutate(
-    year = lubridate::year(timestamp), 
-    month = lubridate::month(timestamp),
-    yday = lubridate::yday(timestamp)
-  ) %>% 
-  filter(
-    id %in% c("P151-5552", "P152-7077", "P153-7417"), #"P150-6409", "P155-3534"
-  )
+```{r map-prep}
+## ggplot theme
+theme_set(theme_light(base_size = 14, base_family = "Proxima Nova"))
 
-sf_p_all <-
-  sf_p %>% 
+theme_update(
+  panel.grid.major = element_line(size = .3, color = "#ead2ae"),
+  panel.grid.minor = element_blank(),
+  panel.background = element_rect(fill = "#f6ecdd")
+)
+
+## color palette
+pal <- rcartocolor::carto_pal(n = 4, name = "Bold")[1:3]
+
+## map projection (UTM S33)
+map_proj <- "+proj=utm +zone=33 +south +ellps=bess_nam +towgs84=616,97,-251,0,0,0,0 +units=m +no_defs"
+
+## background and main data (+ turn into trajectories)
+sf_all_line <-
+  sf_floaters %>% 
   filter(
     #(year == 2020 & month %in% 11:12) | (year == 2021)
     (year == 2020 & month %in% 2:12) | (year == 2021)
@@ -161,221 +151,69 @@ sf_p_all <-
   summarise(do_union = FALSE) %>%
   st_cast("LINESTRING")
 
-sf_p_highlight <-
-  sf_p %>% 
+sf_highlight <-
+  sf_floaters %>% 
   filter(yday %in% 348:366 & year == 2020)
 
-sf_p_highlight_line <-
-  sf_p %>% 
+sf_highlight_line <-
+  sf_floaters %>% 
   filter(yday %in% 348:366 & year == 2020) %>% 
   group_by(id)  %>%
   summarise(do_union = FALSE) %>%
   st_cast("LINESTRING")
+```
 
-pal <- rcartocolor::carto_pal(n = 4, name = "Bold")[1:3]
-map_proj <- "+proj=utm +zone=33 +south +ellps=bess_nam +towgs84=616,97,-251,0,0,0,0 +units=m +no_defs"
-
+```{r map-overview}
 ## overview 
-map <- sf_p_all %>% 
+map <- 
+  sf_all_line %>% 
   ggplot() + 
     ## KDE95 Fill --------------------------------------------------------------
-    geom_sf(data = sf_p_kde95, fill = "#ead2ae", color = NA) +
-    #geom_sf(data = sf_trees, shape = 18, size = 3, color = "#228b22") +
+    geom_sf(data = sf_kde95, fill = "#ead2ae", color = NA) +
     ## Trajectories Outline ----------------------------------------------------
-    geom_sf(data = sf_p_all, color = "white", size = 1.5) + 
-    geom_sf(data = sf_p_highlight_line, color = "white", size = 2.3) + 
+    geom_sf(data = sf_all_line, color = "white", size = 1.5) + 
+    geom_sf(data = sf_highlight_line, color = "white", size = 2.3) + 
     ## Trajectories Background -------------------------------------------------
     geom_sf(
       aes(color = id, color = after_scale(desaturate(lighten(color, .7), .5))),
       size = .8
     ) +
     ## KDE95 Outline -----------------------------------------------------------
-    geom_sf(data = sf_p_kde95, fill = NA, color = "grey40", size = .5, linetype = "11") +
+    geom_sf(data = sf_kde95, fill = NA, color = "grey40", size = .5, linetype = "11") +
     ## Trajectories Highlight --------------------------------------------------
-    geom_sf(data = sf_p_highlight_line, aes(color = id), size = .8) + 
+    geom_sf(data = sf_highlight_line, aes(color = id), size = .8) + 
     ## KDE50 Outline -----------------------------------------------------------
-    geom_sf(data = sf_p_kde50, color = "black", fill = NA, linetype = "11", size = .7) +
+    geom_sf(data = sf_kde50, color = "black", fill = NA, linetype = "11", size = .7) +
     # geom_sf_label(
     #   data = sf_p_highlight %>% group_by(id, yday) %>% slice(1),
     #   aes(color = id, label = yday)
     # ) +
     coord_sf(xlim = c(17.2, NA), ylim = c(-22.4, -21.5), crs = map_proj) +
     scale_color_manual(values = pal) +
-    theme_light(base_size = 14, base_family = "Proxima Nova") +
-    theme(
-      #legend.position = c(.1, .5),
-      panel.grid.major = element_line(size = .3, color = "#ead2ae"),
-      panel.grid.minor = element_blank(),
-      panel.background = element_rect(fill = "#f6ecdd")
-    ) +
     ggsave(here::here("plots", "dev", glue("{format(Sys.time(), '%Y%m%d_%H%M%S')}_cheetah.pdf")), 
            width = 15, height = 15, device = cairo_pdf)
+```
 
-map <- sf_p_all %>% 
+```{r map-P-hub}
+map <- 
+  sf_all_line %>% 
   ggplot() + 
-    #geom_sf(data = kdes, fill = "grey30", color = NA, alpha = .1) +
-    #geom_sf(data = sf_trees, shape = 18, size = 3, color = "#228b22") +
-    #geom_sf(aes(color = id, 
-    #            color = after_scale(colorspace::lighten(colorspace::desaturate(color, .4), .4))),
-    #        size = .8, alpha = .5) +
-    #geom_sf(data = sf_p_highlight_line, aes(color = id), size = .8) + 
-    geom_sf(data = sf_p_highlight, color = "white", size = 4.5) +
-    geom_sf(data = sf_p_highlight_line, color = "white", size = 2.7) +
-    geom_sf(data = sf_p_highlight_line, aes(color = id), size = 1.4, alpha = .3) +
-    geom_sf(data = sf_p_highlight, aes(color = id), 
+    ## Observations Outline ----------------------------------------------------
+    geom_sf(data = sf_highlight, color = "white", size = 4.5) +
+    ## Trajectories Outline ----------------------------------------------------
+    geom_sf(data = sf_highlight_line, color = "white", size = 2.7) +
+    ## Trajectories ------------------------------------------------------------
+    geom_sf(data = sf_highlight_line, aes(color = id), size = 1.4, alpha = .3) +
+    ## Observations ------------------------------------------------------------
+    geom_sf(data = sf_highlight, aes(color = id), 
             size = 2.2, shape = 21, fill = "#f6ecdd", stroke = 1.4) +
-    #geom_sf_label(data = sf_p_highlight %>% group_by(id, yday) %>% slice(1), 
-    #              aes(color = id, label = yday)) +
-    geom_sf(data = sf_p_kde50, color = "black", fill = NA, linetype = "22", size = .7) +
+    ## KDE50 Outline -----------------------------------------------------------
+    geom_sf(data = sf_kde50, color = "black", fill = NA, linetype = "22", size = .7) +
     coord_sf(xlim = c(17.71, 17.76), ylim = c(-21.835, -21.79), crs = map_proj) +
-    #coord_sf(xlim = c(17.6, 17.85), ylim = c(-21.95, -21.7), crs = map_proj) +
-    #rcartocolor::scale_color_carto_d(palette = "Bold") +
     scale_color_manual(values = pal) +
-    theme_light(base_size = 14, base_family = "Proxima Nova") +
-    theme(
-      #legend.position = c(.1, .5),
-      panel.grid.major = element_line(size = .3, color = "#ead2ae"),
-      panel.grid.minor = element_blank(),
-      panel.background = element_rect(fill = "#f6ecdd")
-    ) +
-    ggsave(here::here("plots", "dev", glue("{format(Sys.time(), '%Y%m%d_%H%M%S')}_cheetah.pdf")), 
-           width = 15, height = 15, device = cairo_pdf)
-
-
-#################################################################################
-
-df_a <- df_floaters %>% filter(hub == "A")
-df_trees <- sf_trees %>% 
-    #mutate(x = st_coordinates(.)[,1], y = st_coordinates(.)[,2]) %>% 
-    st_drop_geometry() %>% 
-    mutate(img = here("img", "IZW-single-tree-sgendera-final.png"))
-
-map <- df_a %>% 
-    ggplot() + 
-    #geom_sf(data = sf_a_mcp95, fill = "tan") +
-    #geom_sf(data = sf_a_mcp50, fill = "firebrick") +
-    geom_image(data = df_trees, aes(x = X, y = Y, image = img)) +
-    #geom_sf(aes(color = step), size = .2, alpha = .5, show.legend = FALSE) +
     ggsave(here::here("plots", "dev", glue("{format(Sys.time(), '%Y%m%d_%H%M%S')}_cheetah.pdf")), 
            width = 15, height = 15, device = cairo_pdf)
 ```
-
-## Map A Hub
-
-```{r map}
-sf_a <- sf_floaters %>% 
-  mutate(
-    year = lubridate::year(timestamp), 
-    month = lubridate::month(timestamp, label = T, abbr = F),
-    yday = lubridate::yday(timestamp)
-  ) %>% 
-  filter(
-    #id %in% c("A148-2646", "A154-3198", "A154-3531", "A154-5546"), 
-    year %in% 2012, 
-    hub == "A"
-  )
-
-sf_a_all <-
-  sf_a %>% 
-  #filter(
-  # (year == 2020 & month %in% 11:12) | (year == 2021)
-  #) %>%
-  group_by(id, month)  %>%
-  summarise(do_union = FALSE) %>%
-  st_cast("LINESTRING")
-
-
-ggplot(sf_a_all) +
-  geom_sf(aes(color = id), size = .4) + 
-  facet_wrap(~month) +
-  rcartocolor::scale_color_carto_d(palette = "Bold") +
-  theme_light(base_size = 14, base_family = "Proxima Nova") +
-  theme(#legend.position = c(.1, .5),
-        panel.grid.minor = element_blank()) +
-  ggsave(here::here("plots", "dev", glue("{format(Sys.time(), '%Y%m%d_%H%M%S')}_cheetah.pdf")), 
-         width = 15, height = 15, device = cairo_pdf)
-
-sf_p_highlight <-
-  sf_p %>% 
-  filter(yday %in% 348:366 & year == 2020) %>%
-  group_by(id)
-
-sf_p_highlight_line <-
-  sf_p %>% 
-  filter(yday %in% 348:366 & year == 2020) %>% 
-  group_by(id)  %>%
-  summarise(do_union = FALSE) %>%
-  st_cast("LINESTRING")
-
-pal <- rcartocolor::carto_pal(n = 4, name = "Bold")[1:3]
-
-## overview 
-map <- sf_p_all %>% 
-  ggplot() + 
-    #geom_sf(data = kdes, fill = "firebrick", color = NA, alpha = .1) +
-    geom_sf(data = kdes[1,], fill = "grey95", color = "grey60", size = .2, linetype = "11") +
-    #geom_sf(data = sf_trees, shape = 18, size = 3, color = "#228b22") +
-    geom_sf(aes(color = id, 
-                color = after_scale(colorspace::lighten(colorspace::desaturate(color, .4), .4))),
-            size = .4, alpha = .4) +
-    geom_sf(data = sf_p_highlight_line, aes(color = id), size = .4) + 
-    geom_sf(data = kdes[11,], color = "black", fill = NA, linetype = "22", size = .5) +
-    # geom_sf_label(data = sf_p_highlight %>% group_by(id, yday) %>% slice(1), 
-    #               aes(color = id, label = yday)) +
-    coord_sf(xlim = c(17.2, NA), ylim = c(NA, -21.5)) +
-    #rcartocolor::scale_color_carto_d(palette = "Bold") +
-    scale_color_manual(values = pal) +
-    theme_light(base_size = 14, base_family = "Proxima Nova") +
-    theme(#legend.position = c(.1, .5),
-          panel.grid.minor = element_blank()) +
-    ggsave(here::here("plots", "dev", glue("{format(Sys.time(), '%Y%m%d_%H%M%S')}_cheetah.pdf")), 
-           width = 15, height = 15, device = cairo_pdf)
-
-## hub
-map <- sf_p_all %>% 
-  ggplot() + 
-    geom_sf(data = kdes, fill = "grey30", color = NA, alpha = .1) +
-    #geom_sf(data = sf_trees, shape = 18, size = 3, color = "#228b22") +
-    geom_sf(aes(color = id, 
-                color = after_scale(colorspace::lighten(colorspace::desaturate(color, .4), .4))),
-            size = .8, alpha = .5) +
-    geom_sf(data = sf_p_highlight_line, aes(color = id), size = .8) + 
-    geom_sf(data = sf_p_highlight_line, aes(color = id), size = .8, alpha = .5) + 
-    #geom_sf_label(data = sf_p_highlight %>% group_by(id, yday) %>% slice(1), 
-    #              aes(color = id, label = yday)) +
-    geom_sf(data = kdes[11,], color = "black", fill = NA, linetype = "22", size = .7) +
-    coord_sf(xlim = c(17.45, 17.95), ylim = c(-22.1, -21.55)) +
-    #coord_sf(xlim = c(17.45, 17.95), ylim = c(-22, -21.5)) +
-    #rcartocolor::scale_color_carto_d(palette = "Bold") +
-    scale_color_manual(values = pal) +
-    theme_light(base_size = 14, base_family = "Proxima Nova") +
-    theme(#legend.position = c(.1, .5),
-          panel.grid.minor = element_blank()) +
-    ggsave(here::here("plots", "dev", glue("{format(Sys.time(), '%Y%m%d_%H%M%S')}_cheetah.pdf")), 
-           width = 15, height = 15, device = cairo_pdf)
-
-
-###############################
-
-df_a <- df_floaters %>% filter(hub == "A")
-df_trees <- sf_trees %>% 
-    #mutate(x = st_coordinates(.)[,1], y = st_coordinates(.)[,2]) %>% 
-    st_drop_geometry() %>% 
-    mutate(img = here("img", "IZW-single-tree-sgendera-final.png"))
-
-map <- df_a %>% 
-    ggplot() + 
-    #geom_sf(data = sf_a_mcp95, fill = "tan") +
-    #geom_sf(data = sf_a_mcp50, fill = "firebrick") +
-    geom_image(data = df_trees, aes(x = X, y = Y, image = img)) +
-    #geom_sf(aes(color = step), size = .2, alpha = .5, show.legend = FALSE) +
-    ggsave(here::here("plots", "dev", glue("{format(Sys.time(), '%Y%m%d_%H%M%S')}_cheetah.pdf")), 
-           width = 15, height = 15, device = cairo_pdf)
-```
-
-
-
-
 
 ```{r convert-pdf}
 pdfs <- list.files(here("plots"), pattern = "*.pdf")
