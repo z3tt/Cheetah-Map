@@ -28,9 +28,11 @@ Sys.setlocale("LC_TIME", "C")
 ```{r packages}
 library(tidyverse)
 library(sf)
+library(stars)
 library(elevatr)
 library(raster)
 library(purrr)
+library(ggnewscale)
 library(systemfonts)
 library(here)
 library(glue)
@@ -51,11 +53,20 @@ proj <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
 ## 0 Communication hub borders
 path <- here("data", "0 Communication hub borders")
 
-## KDE's from Jörg
+## KDEs P Hub
 sf_kde50 <- st_read(dsn = glue("{path}/KDE50/P068kde50_tgf.shp")) %>% 
   st_transform(crs = proj)
 sf_kde95 <- st_read(dsn = glue("{path}/KDE95/P068kde95_tgf.shp")) %>% 
   st_transform(crs = proj)
+
+## KDEs Neighbouring Hubs
+sf_kde_neighb <- 
+  st_read(dsn = glue("{path}/Neigbouring hubs/HS_merged190128.shp")) %>% 
+  st_transform(crs = proj) %>% 
+  filter(level == 50) %>%  
+  mutate(id = 1:28) %>% 
+  filter(id %in% c(2, 5, 15, 22))
+
 
 ## Calculate KDEs new
 # terri <- read_csv(glue("{path}/Terri raw data/P068_tgf.csv")) %>% 
@@ -73,7 +84,7 @@ sf_kde95 <- st_read(dsn = glue("{path}/KDE95/P068kde95_tgf.shp")) %>%
 # kdes <- map_df(rev(seq(50, 95, by = 5)), vers)
 ```
 
-### Trees
+### Marking Trees
 
 ```{r data-trees}
 ## 1 marking trees
@@ -126,25 +137,32 @@ sf_floaters <-
 bbox_overview <- as(extent(17.1, 18.3, -22.5, -21), 'SpatialPolygons')
 crs(bbox_overview) <- crs(proj)
 
-dem_overview <- elevatr::get_elev_raster(locations = bbox_overview, z = 11, proj = proj)
-#sf_dem_ov <- stars::st_as_stars(dem_overview)
+file_ov <- here("data", "3 raster data", "dem_overview.tif")
 
-dem_overview@data@values <- dem_overview@data@values * 10
+if(!file.exists(file_ov)) {
+  dem_ov <- elevatr::get_elev_raster(locations = bbox_overview, z = 11, proj = proj)
+  dem_ov@data@values <- dem_ov@data@values * 10
+  writeRaster(dem_ov, file_ov)
+} else {
+  dem_ov <- raster(file_ov)
+}
+
+# <- aggregate(dem_ov, fact = 50)
 
 slope_ov <- terrain(dem_ov, opt = "slope", unit = "radians")
 aspect_ov <- terrain(dem_ov, opt = "aspect", unit = "radians")
 
 sf_hill_ov <-
   hillShade(slope_ov, aspect_ov, 40, 270) %>%
-  aggregate(fact = 2 , method = "bilinear") %>% 
-  focal(w = matrix(1/9, nc = 30, nr = 30), mean) %>% 
+  aggregate(fact = 3, method = "bilinear") %>% 
+  focal(w = matrix(1/9, nc = 3, nr = 3), mean) %>% 
   rasterToPoints() %>%
   as_tibble() %>% 
   stars::st_as_stars()
 
 sf_slope_ov <-
   slope_ov %>%
-  aggregate(fact = 2, method = "bilinear") %>%
+  aggregate(fact = 3, method = "bilinear") %>%
   rasterToPoints() %>%
   as_tibble() %>%
   ## invert the scale so that more slope is darker
@@ -156,17 +174,22 @@ sf_slope_ov <-
 bbox_hub <- as(extent(17.7, 17.78, -21.84, -21.79), 'SpatialPolygons')
 crs(bbox_hub) <- crs(proj)
 
-dem_hub <- elevatr::get_elev_raster(locations = bbox_hub, z = 14, proj = proj) 
-#sf_dem_hub <- stars::st_as_stars(dem_hub)
+file_hub <- here("data", "3 raster data", "dem_hub.tif")
 
-dem_hub@data@values <- dem_hub@data@values * 10
+if(!file.exists(file_hub)) {
+  dem_hub <- elevatr::get_elev_raster(locations = bbox_hub, z = 14, proj = proj)
+  dem_hub@data@values <- dem_hub@data@values * 10
+  writeRaster(dem_hub, file_hub)
+} else {
+  dem_hub <- raster(file_hub)
+}
 
 slope_hub <- terrain(dem_hub, opt = "slope", unit = "radians")
 aspect_hub <- terrain(dem_hub, opt = "aspect", unit = "radians")
 
 sf_hill_hub <-
   hillShade(slope_hub, aspect_hub, 40, 270) %>%
-  aggregate(fact = 2 , method = "bilinear") %>% 
+  aggregate(fact = 5, method = "bilinear") %>% 
   focal(w = matrix(1/9, nc = 3, nr = 3), mean) %>% 
   rasterToPoints() %>%
   as_tibble() %>% 
@@ -174,7 +197,7 @@ sf_hill_hub <-
 
 sf_slope_hub <-
   slope_hub %>%
-  aggregate(fact = 2, method = "bilinear") %>%
+  aggregate(fact = 5, method = "bilinear") %>%
   rasterToPoints() %>%
   as_tibble() %>%
   ## invert the scale so that more slope is darker
@@ -185,9 +208,11 @@ sf_slope_hub <-
 ### Tree Cover
 
 ```{r tree-cover}
-sf_tc <- raster(here("data", "3 tree cover", "Hansen_GFC2015_treecover2000_20S_010E.tif")) %>% 
+sf_tc <- 
+  raster(here("data", "3 raster data", "Hansen_GFC2015_treecover2000_20S_010E.tif")) %>% 
   crop(bbox_overview) %>% 
-  aggregate(fact = 10) %>% 
+  aggregate(fact = 10) %>%
+  #aggregate(fact = 100) %>% 
   stars::st_as_stars() %>% 
   mutate(Hansen_GFC2015_treecover2000_20S_010E = if_else(
     Hansen_GFC2015_treecover2000_20S_010E < .1, NA_real_, Hansen_GFC2015_treecover2000_20S_010E
@@ -197,7 +222,7 @@ sf_tc <- raster(here("data", "3 tree cover", "Hansen_GFC2015_treecover2000_20S_0
 
 ## Maps P Hub
 
-```{r map-prep}
+```{r plotting-prep}
 ## ggplot theme
 theme_set(theme_light(base_size = 18, base_family = "Kameron")) #Amplitude-Regular
 
@@ -214,17 +239,47 @@ theme_update(
   legend.key.width = unit(3, "lines"),
   legend.key.height = unit(1.3, "lines"),
   legend.text = element_text(size = 17),
-  legend.background = element_rect(fill = NA, color = NA)
+  legend.background = element_rect(fill = NA, color = NA),
+  plot.margin = margin(rep(25, 4))
 )
 
 ## color palette
-pal <- rcartocolor::carto_pal(n = 4, name = "Bold")[c(2, 1, 3)]
-
-## map projection (UTM S33)
-map_proj <- "+proj=utm +zone=33 +south +ellps=bess_nam +towgs84=616,97,-251,0,0,0,0 +units=m +no_defs"
+pal <- c("#0f936c", "#7F3C8D", "#3969AC")
+# based on rcartocolor::carto_pal(n = 4, name = "Bold")[c(2, 1, 3)] 
 
 ## tree image
 img_tree <- grid::rasterGrob(png::readPNG(here("img", "tree.png")), interpolate = TRUE)
+```
+
+
+```{r map-data-prep}
+## map projection (UTM S33)
+map_proj <- "+proj=utm +zone=33 +south +ellps=bess_nam +towgs84=616,97,-251,0,0,0,0 +units=m +no_defs"
+
+## labeling of individuals
+sf_ind <- tibble(id = c("P151-5552", "P152-7077", "P153-7417")) %>% 
+  mutate(geom = st_sfc(
+    st_point(c(17.812, -21.958)), 
+    st_point(c(17.6725, -21.988)), 
+    st_point(c(17.99, -21.753))
+  )) %>% 
+  st_as_sf(crs = proj)
+
+## labeling of hubs
+sf_hub <- tibble(hub = c("P Hub", "Neighbouring Hubs")) %>% 
+  mutate(geom = st_sfc(
+    st_point(c(17.842, -21.854)), 
+    st_point(c(17.957, -21.806))
+  )) %>% 
+  st_as_sf(crs = proj)
+
+## labeling of legend items
+sf_leg <- tibble(lab = c("Territorial Cheetah", "Floating Cheetah")) %>% 
+  mutate(geom = st_sfc(
+    st_point(c(17.39, -21.666)), 
+    st_point(c(17.39, -21.702))
+  )) %>% 
+  st_as_sf(crs = proj)
 
 ## background and main data (+ turn into trajectories)
 sf_all_line <-
@@ -259,60 +314,109 @@ overview <-
     ## Hillshading -------------------------------------------------------------
     stars::geom_stars(data = sf_hill_ov) +
     stars::geom_stars(data = sf_slope_ov, alpha = .8) +
-    scale_fill_gradient(high = "#f5e9d7", low = "#845c21", guide = "none") +
+    #scale_fill_gradient(high = "#f5e9d7", low = "#654619", guide = "none") + #BROWN for gradients (old)
+    #scale_fill_gradient(high = "#f5dfd6", low = "#652d19", guide = "none") + #REDISH for gradients
+    scale_fill_gradient(high = "#edc6b6", low = "#461f11", guide = "none") + # for rcarto
     new_scale_fill() +
     
     ## KDE95 Fill --------------------------------------------------------------
-    geom_sf(data = sf_kde95, fill = "grey40", color = NA, alpha = .2) + ##ead2ae
+    geom_sf(data = sf_kde95, fill = "grey40", color = NA, alpha = .2) + 
   
     ## Tree Cover --------------------------------------------------------------
-    geom_stars(data = sf_tc, alpha = .23) +
+    geom_stars(data = sf_tc, alpha = .27) +
     rcartocolor::scale_fill_carto_c(palette = "Emrld", guide = "none") +
-    #scale_fill_gradient(low = "#A5D6A7", high = "#1C5E1F", guide = "none") +
+    #geom_stars(data = sf_tc, alpha = .33) +
+    #scale_fill_gradient(low = "#347136", high = "#1b3b1c", guide = "none") + 
+    #geom_stars(data = sf_tc, alpha = .22) +
+    #scale_fill_gradient(low = "#214923", high = "#152e16", guide = "none") +
   
     ## Trajectories Outline ----------------------------------------------------
-    geom_sf(color = "#edd8b8", size = 1.5) + 
+    geom_sf(color = "#edd8b8", size = 1.4) + 
     geom_sf(data = sf_highlight_line, color = "#edd8b8", size = 2.3) + ##edd8b8
   
     ## Trajectories Background -------------------------------------------------
     geom_sf(
-      aes(color = id, color = after_scale(desaturate(lighten(color, .4), .6))),
+      aes(color = id, color = after_scale(desaturate(lighten(color, .33), .55))),
       size = .8
     ) +
   
     ## KDE95 Shadow ------------------------------------------------------------
     geom_sf(
       data = sf_kde95 %>% st_buffer(dist = .0014), 
-      fill = NA, color = "#49494966", size = 1.4
+      fill = NA, color = "#35353566", size = 1.7
     ) + #grey60
     
     ## KDE95 Outline -----------------------------------------------------------
-    geom_sf(data = sf_kde95, fill = NA, color = "grey40", size = .3) + #, linetype = "11"
+    geom_sf(data = sf_kde95, fill = NA, color = "grey25", size = .55) + #, linetype = "11"
   
     ## Trajectories Highlight --------------------------------------------------
     geom_sf(data = sf_highlight_line, aes(color = id), size = .8) + 
   
     ## KDE50 Outline -----------------------------------------------------------
-    geom_sf(data = sf_kde50, color = "black", fill = NA, linetype = "11", size = .7) +
+    geom_sf(data = sf_kde50, color = "black", fill = NA, linetype = "11", size = .85) +
+  
+    ## KDEs Neighbouring Hubs --------------------------------------------------
+    geom_sf(data = sf_kde_neighb, color = "#2b2b2b", fill = NA, linetype = "13", size = .65) +
   
     ## Labels ------------------------------------------------------------------
-    # geom_sf_label(
-    #   data = sf_p_highlight %>% group_by(id, yday) %>% slice(1),
-    #   aes(color = id, label = yday)
-    # ) +
+    geom_sf_text(
+      data = sf_leg, aes(label = lab),
+      family = "Kameron", size = 6.2, color = "black", 
+      fontface = "bold", hjust = 0, show.legend = FALSE
+    ) +
+    geom_sf_text(
+      data = sf_ind, 
+      aes(color = id, color = after_scale(darken(color, .12)), 
+          label = id),
+      family = "Bebas Neue", size = 5.2, show.legend = FALSE
+    ) +
+    geom_sf_text(
+      data = sf_hub[1,], aes(label = hub),
+      family = "Bebas Neue", size = 5.5, color = "black", 
+      hjust = 0, show.legend = FALSE
+    ) +
+    geom_sf_text(
+      data = sf_hub[2,], aes(label = hub),
+      family = "Bebas Neue", size = 5.2, color = "#494949", 
+      hjust = 0, show.legend = FALSE
+    ) +
+    annotation_scale(
+      location = "br", line_width = 1.3, width_hint = 0.4, height = unit(0.3, "cm"),
+      text_cex = 1.05, text_family = "Bebas Neue"
+    ) +
     
     ## Scales + Coordinate System ----------------------------------------------
     coord_sf(expand = FALSE) + #, crs = map_proj
-    scale_x_continuous(limits = c(17.25, 18.18)) +
+    scale_x_continuous(limits = c(17.28, 18.18)) +
     scale_y_continuous(limits = c(-22.21, -21.55)) +
-    scale_color_manual(values = pal, name = NULL) +
-    #rcartocolor::scale_fill_carto_c(palette = "BrwnYl", direction = -1) +
-    #scale_fill_gradient(high = "#f5e9d7", low = "#845c21") +
-    #scale_fill_gradient(low = , mid = , high = , midpoint = ) +
-    guides(color = guide_legend(override.aes = list(size = 2.5))) +
-    theme(legend.position = c(.095, .95)) +
+    scale_color_manual(values = pal, guide = "none")
+  
+    ## OLD LEGEND
+    #scale_color_manual(values = pal, name = NULL) +
+    #guides(color = guide_legend(override.aes = list(size = 2.5))) +
+    #theme(legend.position = c(.095, .95))
+
+overview_img <- 
+  ggdraw(overview) +
+    ## territorial individual
+    draw_image(here("img", "gepard-terri-main.png"), x = .614, y = .558, 
+               hjust = .5, vjust = .5, width = .069) +
+    draw_image(here("img", "gepard-terri-other.png"), x = .728, y = .623, 
+               hjust = .5, vjust = .5, width = .06) +
+    ## floater
+    draw_image(here("img", "gepard-floater1a.png"), x = .606, y = .435, 
+               hjust = .5, vjust = .5, width = .049) +
+    draw_image(here("img", "gepard-floater1b.png"), x = .468, y = .394, 
+               hjust = .5, vjust = .5, width = .049) +
+    draw_image(here("img", "gepard-floater1c.png"), x = .78, y = .72, 
+               hjust = .5, vjust = .5, width = .049) +
+    ## legend
+    draw_image(here("img", "gepard-terri-main.png"), x = .165, y = .82, 
+               hjust = .5, vjust = .5, width = .072) +
+    draw_image(here("img", "gepard-floater1.png"), x = .16, y = .765, 
+               hjust = .5, vjust = .5, width = .056) +
     ggsave(here::here("plots", "dev", glue("{format(Sys.time(), '%Y%m%d_%H%M%S')}_cheetah.pdf")), 
-           width = 15, height = 15, device = cairo_pdf)
+           width = 16, height = 12.2, device = cairo_pdf)
 ```
 
 ### Hub Map
@@ -325,32 +429,48 @@ hub <-
   ## Hillshading -------------------------------------------------------------
     stars::geom_stars(data = sf_hill_hub) +
     stars::geom_stars(data = sf_slope_hub, alpha = .8) +
+    scale_fill_gradient(high = "#f5e9d7", low = "#b47e2d", guide = "none") + #845c21
+    new_scale_fill() +
     
+    ## KDE95 Fill --------------------------------------------------------------
+    geom_sf(data = sf_kde95, fill = "grey40", color = NA, alpha = .2) + ##ead2ae
+  
+    ## Tree Cover --------------------------------------------------------------
+    geom_stars(data = sf_tc, alpha = .23) +
+    #rcartocolor::scale_fill_carto_c(palette = "Emrld", guide = "none") +
+    scale_fill_gradient(low = "#A5D6A7", high = "#1C5E1F", guide = "none") +  
+  
     # Observations Outline ----------------------------------------------------
-    geom_sf(data = sf_highlight, color = "white", size = 4.5) +
+    geom_sf(data = sf_highlight, color = "#edd8b8", size = 4.5) +
   
     ## Trajectories Outline ----------------------------------------------------
-    geom_sf(color = "white", size = 2.7) +
+    geom_sf(color = "#edd8b8", size = 2.7) +
   
     ## Trajectories ------------------------------------------------------------
-    geom_sf(aes(color = id), size = 1.4, alpha = .3) +
+    geom_sf(color = "white", size = 1.4) +
+    geom_sf(aes(color = id), size = 1.4, alpha = .5) +
   
     ## Observations ------------------------------------------------------------
     geom_sf(data = sf_highlight, aes(color = id), 
-            size = 2.2, shape = 21, fill = "#f6ecdd", stroke = 1.4) +
+            size = 2.2, shape = 21, fill = "#edd8b8", stroke = 1.4) +
   
+    ## KDE95 Shadow ------------------------------------------------------------
+    geom_sf(
+      data = sf_kde50 %>% st_buffer(dist = .0005), 
+      fill = NA, color = "#49494966", size = 1.4
+    ) + #grey60
+    
     ## KDE50 Outline -----------------------------------------------------------
     geom_sf(data = sf_kde50, color = "black", fill = NA, linetype = "22", size = .7) +
   
     ## Trees -------------------------------------------------------------------
-    geom_sf(data = sf_trees, shape = 5, color = "#006700", stroke = .4, size = 2) +
+    #geom_sf(data = sf_trees, shape = 5, color = "#006700", stroke = .4, size = 2) +
   
     ## Scales + Coordinate System ----------------------------------------------
-    coord_sf(expand = FALSE) + #, crs = map_proj) +
-    scale_x_continuous(limits = c(17.71, 17.76)) +
-    scale_y_continuous(limits = c(-21.838, -21.792)) +
+    coord_sf(expand = FALSE, xlim = c(17.71, 17.76), ylim = c(-21.838, -21.792)) + #, crs = map_proj) +
+    scale_x_continuous(limits = c(17.7, 17.77)) +
+    scale_y_continuous(limits = c(-21.85, -21.78)) +
     scale_color_manual(values = pal) +
-    scale_fill_gradient(high = "#f5e9d7", low = "#845c21", guide = "none") +
     ggsave(here::here("plots", "dev", glue("{format(Sys.time(), '%Y%m%d_%H%M%S')}_cheetah.pdf")), 
            width = 15, height = 15, device = cairo_pdf)
 ```
