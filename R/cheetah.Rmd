@@ -65,7 +65,7 @@ sf_kde_neighb <-
   st_transform(crs = proj) %>% 
   filter(level == 50) %>%  
   mutate(id = 1:28) %>% 
-  filter(id %in% c(2, 5, 15, 22))
+  filter(id %in% c(2, 15, 22))
 
 
 ## Calculate KDEs new
@@ -224,17 +224,15 @@ sf_tc <-
 
 ```{r plotting-prep}
 ## ggplot theme
-theme_set(theme_light(base_size = 18, base_family = "Kameron")) #Amplitude-Regular
+theme_set(theme_light(base_size = 18, base_family = "Lora")) #Amplitude-Regular
 
 theme_update(
-  panel.grid.major = element_line(size = .3, color = "#ead2ae"),
-  panel.grid.minor = element_blank(),
-  panel.background = element_rect(fill = "#f6ecdd"),
-  panel.border = element_rect(size = 2, color = "grey40", fill = NA),
+  panel.grid = element_blank(),
+  panel.border = element_rect(size = 2, color = "grey12", fill = NA),
   axis.title = element_blank(),
-  axis.ticks = element_line(color = "grey40"),
+  axis.ticks = element_line(color = "grey12"),
   axis.ticks.length = unit(.7, "lines"),
-  axis.text = element_text(color = "grey40"),
+  axis.text = element_text(color = "grey12"),
   legend.key = element_rect(fill = NA, color = NA),
   legend.key.width = unit(3, "lines"),
   legend.key.height = unit(1.3, "lines"),
@@ -257,7 +255,8 @@ img_tree <- grid::rasterGrob(png::readPNG(here("img", "tree.png")), interpolate 
 map_proj <- "+proj=utm +zone=33 +south +ellps=bess_nam +towgs84=616,97,-251,0,0,0,0 +units=m +no_defs"
 
 ## labeling of individuals
-sf_ind <- tibble(id = c("P151-5552", "P152-7077", "P153-7417")) %>% 
+sf_ind <- 
+  tibble(id = c("P151-5552", "P152-7077", "P153-7417")) %>% 
   mutate(geom = st_sfc(
     st_point(c(17.812, -21.958)), 
     st_point(c(17.6725, -21.988)), 
@@ -266,20 +265,49 @@ sf_ind <- tibble(id = c("P151-5552", "P152-7077", "P153-7417")) %>%
   st_as_sf(crs = proj)
 
 ## labeling of hubs
-sf_hub <- tibble(hub = c("P Hub", "Neighbouring Hubs")) %>% 
+sf_hub <- 
+  #tibble(hub = c("P Hub", "Neighbouring Hubs")) %>% 
+  tibble(hub = c("P Hub")) %>% 
   mutate(geom = st_sfc(
-    st_point(c(17.842, -21.854)), 
-    st_point(c(17.957, -21.806))
+    st_point(c(17.842, -21.854))#, 
+    #st_point(c(17.957, -21.806))
   )) %>% 
   st_as_sf(crs = proj)
 
 ## labeling of legend items
-sf_leg <- tibble(lab = c("Territorial Cheetah", "Floating Cheetah")) %>% 
+sf_leg <- 
+  tibble(lab = c(
+    "Territory Holders", 
+    "Floating Individuals",
+    "Core areas as 50% KDE of four cheetahs (red)\nHome range as 95% KDE of one cheetah (grey)",
+    "GPS tracks of three cheetahs\n1 June 2020 – 7 January 2021"
+  )) %>% 
   mutate(geom = st_sfc(
-    st_point(c(17.39, -21.666)), 
-    st_point(c(17.39, -21.702))
+    st_point(c(17.38, -21.646)), 
+    st_point(c(17.38, -21.692)),
+    st_point(c(17.38, -21.657)), 
+    st_point(c(17.38, -21.703))
   )) %>% 
   st_as_sf(crs = proj)
+
+## textboxes
+sf_textbox <- 
+  tibble(lab = c(
+    "The Two Spatial Tactics of Male Cheetah",
+    "Fast facts:",
+    "• The cheetah is the rarest big cat in Africa\n• Last stronghold on farmlands in Namibia\n• Cheetahs are threatened by conflict with cattle farmers\n• Farmers lose calves to cheetahs\n• IZW conducts long-term research on cheetah movement\n• Communication hubs of cheetah were discovered.\n• Cheetah activity is highest in communication hubs\n• Communication hubs = conflict hotspots\n• Avoidance of hotspots reduces losses for farmers",
+    "Graphic: Cédric Scherer\nIcons: Stephanie Gendera\nData: IZW Cheetah Research Project",
+    "Publications: Melzheimer et al. (2018) Ecosphere; Melzheimer et al. (2020) PNAS"
+  )) %>% 
+  mutate(geom = st_sfc(
+    st_point(c(17.3, -21.59)),
+    st_point(c(17.89, -21.887)),
+    st_point(c(17.894, -21.907)),
+    st_point(c(17.3, -22.168)),
+    st_point(c(17.3, -22.19))
+  )) %>% 
+  st_as_sf(crs = proj)
+#Hotspots of Cheetah Activity as a Key to Solving the Cheetah-Farmer Conflict in Namibia
 
 ## background and main data (+ turn into trajectories)
 sf_all_line <-
@@ -314,25 +342,29 @@ overview <-
     ## Hillshading -------------------------------------------------------------
     stars::geom_stars(data = sf_hill_ov) +
     stars::geom_stars(data = sf_slope_ov, alpha = .8) +
-    #scale_fill_gradient(high = "#f5e9d7", low = "#654619", guide = "none") + #BROWN for gradients (old)
-    #scale_fill_gradient(high = "#f5dfd6", low = "#652d19", guide = "none") + #REDISH for gradients
-    scale_fill_gradient(high = "#edc6b6", low = "#461f11", guide = "none") + # for rcarto
+    #scale_fill_gradient(high = "#f5e9d7", low = "#654619") + #BROWN for gradients (old)
+    #scale_fill_gradient(high = "#f5dfd6", low = "#652d19") + #REDISH for gradients
+    scale_fill_gradient(high = "#edc6b6", low = "#461f11") + # for rcarto
     new_scale_fill() +
     
     ## KDE95 Fill --------------------------------------------------------------
-    geom_sf(data = sf_kde95, fill = "grey40", color = NA, alpha = .2) + 
+    geom_sf(data = sf_kde95, fill = "grey30", color = NA, alpha = .33) + 
+    geom_sf(data = sf_kde50, fill = "#871a1a", color = NA, alpha = .66) + 
+    
+    ## KDEs Neighbouring Hubs Fill ---------------------------------------------
+    geom_sf(data = sf_kde_neighb, fill = "#871a1a", color = NA, alpha = .4) +
   
     ## Tree Cover --------------------------------------------------------------
     geom_stars(data = sf_tc, alpha = .27) +
-    rcartocolor::scale_fill_carto_c(palette = "Emrld", guide = "none") +
+    rcartocolor::scale_fill_carto_c(palette = "Emrld") +
     #geom_stars(data = sf_tc, alpha = .33) +
-    #scale_fill_gradient(low = "#347136", high = "#1b3b1c", guide = "none") + 
+    #scale_fill_gradient(low = "#347136", high = "#1b3b1c") + 
     #geom_stars(data = sf_tc, alpha = .22) +
-    #scale_fill_gradient(low = "#214923", high = "#152e16", guide = "none") +
+    #scale_fill_gradient(low = "#214923", high = "#152e16") +
   
     ## Trajectories Outline ----------------------------------------------------
     geom_sf(color = "#edd8b8", size = 1.4) + 
-    geom_sf(data = sf_highlight_line, color = "#edd8b8", size = 2.3) + ##edd8b8
+    geom_sf(data = sf_highlight_line, color = "#edd8b8", size = 2.3) + 
   
     ## Trajectories Background -------------------------------------------------
     geom_sf(
@@ -344,7 +376,11 @@ overview <-
     geom_sf(
       data = sf_kde95 %>% st_buffer(dist = .0014), 
       fill = NA, color = "#35353566", size = 1.7
-    ) + #grey60
+    ) + 
+    # geom_sf(
+    #   data = sf_kde50 %>% st_buffer(dist = .0013),
+    #   fill = NA, color = "#5c121266", size = 1.5
+    # ) +
     
     ## KDE95 Outline -----------------------------------------------------------
     geom_sf(data = sf_kde95, fill = NA, color = "grey25", size = .55) + #, linetype = "11"
@@ -353,43 +389,83 @@ overview <-
     geom_sf(data = sf_highlight_line, aes(color = id), size = .8) + 
   
     ## KDE50 Outline -----------------------------------------------------------
-    geom_sf(data = sf_kde50, color = "black", fill = NA, linetype = "11", size = .85) +
+    geom_sf(data = sf_kde50, color = "#871a1a", fill = NA, linetype = "11", size = .85) +
   
     ## KDEs Neighbouring Hubs --------------------------------------------------
-    geom_sf(data = sf_kde_neighb, color = "#2b2b2b", fill = NA, linetype = "13", size = .65) +
+    geom_sf(data = sf_kde_neighb, color = "#871a1a", fill = NA, linetype = "13", size = .65) +
   
-    ## Labels ------------------------------------------------------------------
+    ## Legend ------------------------------------------------------------------
     geom_sf_text(
-      data = sf_leg, aes(label = lab),
-      family = "Kameron", size = 6.2, color = "black", 
-      fontface = "bold", hjust = 0, show.legend = FALSE
+      data = sf_leg[1:2,], aes(label = lab),
+      family = "Lora", size = 6.2, color = "black", 
+      fontface = "bold", hjust = 0
     ) +
+    geom_sf_text(
+        data = sf_leg[3:4,], aes(label = lab),
+        family = "Lora", size = 4, color = "black", 
+        fontface = "italic", hjust = 0, vjust = 1, lineheight = .9
+      ) +
+    
+    ## Labels ------------------------------------------------------------------
     geom_sf_text(
       data = sf_ind, 
       aes(color = id, color = after_scale(darken(color, .12)), 
           label = id),
-      family = "Bebas Neue", size = 5.2, show.legend = FALSE
+      family = "Bebas Neue", size = 5.2
     ) +
     geom_sf_text(
       data = sf_hub[1,], aes(label = hub),
-      family = "Bebas Neue", size = 5.5, color = "black", 
-      hjust = 0, show.legend = FALSE
+      family = "Bebas Neue", size = 6.2, color = "black", hjust = 0
+    ) +
+    # geom_sf_text(
+    #   data = sf_hub[2,], aes(label = hub),
+    #   family = "Bebas Neue", size = 5.2, color = "#494949",
+    #   hjust = 0, show.legend = FALSE
+    # ) +
+  
+    ## Textboxes ---------------------------------------------------------------
+    geom_sf_text(
+      data = sf_textbox[1,], aes(label = lab),
+      family = "Lora", size = 8.7, color = "black",
+      fontface = "bold.italic", hjust = 0
     ) +
     geom_sf_text(
-      data = sf_hub[2,], aes(label = hub),
-      family = "Bebas Neue", size = 5.2, color = "#494949", 
-      hjust = 0, show.legend = FALSE
+      data = sf_textbox[2,], aes(label = lab),
+      family = "Lora", size = 5.6, color = "grey12",
+      fontface = "bold.italic", hjust = 0, vjust = 1
     ) +
+    geom_sf_text(
+      data = sf_textbox[3,], aes(label = lab),
+      family = "Lora", size = 3.9, color = "grey12",
+      hjust = 0, vjust = 1, lineheight = 1.25
+    ) +
+    geom_sf_text(
+      data = sf_textbox[4,], aes(label = lab),
+      family = "Lora", size = 3.6, color = "black",
+      fontface = "bold.italic", hjust = 0, lineheight = 1.1
+    ) +
+    
+    ## Scalebar ----------------------------------------------------------------
     annotation_scale(
-      location = "br", line_width = 1.3, width_hint = 0.4, height = unit(0.3, "cm"),
+      location = "br", line_width = 1.3, 
+      width_hint = 0.4, height = unit(0.3, "cm"), 
+      pad_x = unit(0.5, "cm"), pad_y = unit(0.5, "cm"),
       text_cex = 1.05, text_family = "Bebas Neue"
     ) +
     
     ## Scales + Coordinate System ----------------------------------------------
     coord_sf(expand = FALSE) + #, crs = map_proj
-    scale_x_continuous(limits = c(17.28, 18.18)) +
-    scale_y_continuous(limits = c(-22.21, -21.55)) +
-    scale_color_manual(values = pal, guide = "none")
+    scale_x_continuous(
+      breaks = seq(17.3, 18.1, by = .1),
+      labels = c(glue("{format(seq(17.3, 18.1, by = .1), nsmall = 1)}°E")), 
+      limits = c(17.28, 18.18)
+    ) +
+    scale_y_continuous(
+      labels = c(rev(glue("{format(seq(21.6, 22.2, by = .1), nsmall = 1)}°S"))), 
+      limits = c(-22.21, -21.55)
+    ) +
+    scale_color_manual(values = pal) +
+    theme(legend.position = "none")
   
     ## OLD LEGEND
     #scale_color_manual(values = pal, name = NULL) +
@@ -398,11 +474,16 @@ overview <-
 
 overview_img <- 
   ggdraw(overview) +
-    ## territorial individual
+    ## P Hub
     draw_image(here("img", "gepard-terri-main.png"), x = .614, y = .558, 
                hjust = .5, vjust = .5, width = .069) +
-    draw_image(here("img", "gepard-terri-other.png"), x = .728, y = .623, 
-               hjust = .5, vjust = .5, width = .06) +
+    ## Neighbouring hubs
+    draw_image(here("img", "gepard-terri-other.png"), x = .512, y = .244, 
+               hjust = .5, vjust = .5, width = .054) +
+    draw_image(here("img", "gepard-terri-other.png"), x = .719, y = .859, 
+               hjust = .5, vjust = .5, width = .054) +
+    draw_image(here("img", "gepard-terri-other.png"), x = .89, y = .834, 
+               hjust = .5, vjust = .5, width = .054) +
     ## floater
     draw_image(here("img", "gepard-floater1a.png"), x = .606, y = .435, 
                hjust = .5, vjust = .5, width = .049) +
@@ -411,13 +492,14 @@ overview_img <-
     draw_image(here("img", "gepard-floater1c.png"), x = .78, y = .72, 
                hjust = .5, vjust = .5, width = .049) +
     ## legend
-    draw_image(here("img", "gepard-terri-main.png"), x = .165, y = .82, 
-               hjust = .5, vjust = .5, width = .072) +
-    draw_image(here("img", "gepard-floater1.png"), x = .16, y = .765, 
-               hjust = .5, vjust = .5, width = .056) +
+    draw_image(here("img", "gepard-terri-main.png"), x = .15, y = .83, 
+               hjust = .5, vjust = .5, width = .074) +
+    draw_image(here("img", "gepard-floater1.png"), x = .146, y = .763, 
+               hjust = .5, vjust = .5, width = .062) +
     ggsave(here::here("plots", "dev", glue("{format(Sys.time(), '%Y%m%d_%H%M%S')}_cheetah.pdf")), 
            width = 16, height = 12.2, device = cairo_pdf)
 ```
+
 
 ### Hub Map
 
