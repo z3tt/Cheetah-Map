@@ -29,14 +29,17 @@ Sys.setlocale("LC_TIME", "C")
 library(tidyverse)
 library(sf)
 library(stars)
-library(elevatr)
 library(raster)
+library(elevatr)
 library(purrr)
+library(ggspatial)
 library(ggnewscale)
+library(cowplot)
+library(colorspace)
 library(systemfonts)
 library(here)
 library(glue)
-library(colorspace)
+library(pdftools)
 ```
 
 
@@ -140,14 +143,12 @@ crs(bbox_overview) <- crs(proj)
 file_ov <- here("data", "3 raster data", "dem_overview.tif")
 
 if(!file.exists(file_ov)) {
-  dem_ov <- elevatr::get_elev_raster(locations = bbox_overview, z = 11, proj = proj)
+  dem_ov <- get_elev_raster(locations = bbox_overview, z = 11, proj = proj)
   dem_ov@data@values <- dem_ov@data@values * 10
   writeRaster(dem_ov, file_ov)
 } else {
   dem_ov <- raster(file_ov)
 }
-
-# <- aggregate(dem_ov, fact = 50)
 
 slope_ov <- terrain(dem_ov, opt = "slope", unit = "radians")
 aspect_ov <- terrain(dem_ov, opt = "aspect", unit = "radians")
@@ -158,7 +159,7 @@ sf_hill_ov <-
   focal(w = matrix(1/9, nc = 3, nr = 3), mean) %>% 
   rasterToPoints() %>%
   as_tibble() %>% 
-  stars::st_as_stars()
+  st_as_stars()
 
 sf_slope_ov <-
   slope_ov %>%
@@ -167,7 +168,7 @@ sf_slope_ov <-
   as_tibble() %>%
   ## invert the scale so that more slope is darker
   mutate(slope = 1 - slope) %>% 
-  stars::st_as_stars()
+  st_as_stars()
 ```
 
 ```{r hillshade-hub}
@@ -177,7 +178,7 @@ crs(bbox_hub) <- crs(proj)
 file_hub <- here("data", "3 raster data", "dem_hub.tif")
 
 if(!file.exists(file_hub)) {
-  dem_hub <- elevatr::get_elev_raster(locations = bbox_hub, z = 14, proj = proj)
+  dem_hub <- get_elev_raster(locations = bbox_hub, z = 14, proj = proj)
   dem_hub@data@values <- dem_hub@data@values * 10
   writeRaster(dem_hub, file_hub)
 } else {
@@ -193,7 +194,7 @@ sf_hill_hub <-
   focal(w = matrix(1/9, nc = 3, nr = 3), mean) %>% 
   rasterToPoints() %>%
   as_tibble() %>% 
-  stars::st_as_stars()
+  st_as_stars()
 
 sf_slope_hub <-
   slope_hub %>%
@@ -202,7 +203,7 @@ sf_slope_hub <-
   as_tibble() %>%
   ## invert the scale so that more slope is darker
   mutate(slope = 1 - slope) %>% 
-  stars::st_as_stars()
+  st_as_stars()
 ```
 
 ### Tree Cover
@@ -213,7 +214,7 @@ sf_tc <-
   crop(bbox_overview) %>% 
   aggregate(fact = 10) %>%
   #aggregate(fact = 100) %>% 
-  stars::st_as_stars() %>% 
+  st_as_stars() %>% 
   mutate(Hansen_GFC2015_treecover2000_20S_010E = if_else(
     Hansen_GFC2015_treecover2000_20S_010E < .1, NA_real_, Hansen_GFC2015_treecover2000_20S_010E
   ))
@@ -242,11 +243,8 @@ theme_update(
 )
 
 ## color palette
-pal <- c("#0f936c", "#7F3C8D", "#3969AC")
+pal <- c("#0f936c", "#8b1996", "#3969AC")
 # based on rcartocolor::carto_pal(n = 4, name = "Bold")[c(2, 1, 3)] 
-
-## tree image
-img_tree <- grid::rasterGrob(png::readPNG(here("img", "tree.png")), interpolate = TRUE)
 ```
 
 
@@ -283,32 +281,39 @@ sf_leg <-
     "GPS tracks of three cheetahs\n1 June 2020 – 7 January 2021"
   )) %>% 
   mutate(geom = st_sfc(
-    st_point(c(17.38, -21.646)), 
-    st_point(c(17.38, -21.692)),
-    st_point(c(17.38, -21.657)), 
-    st_point(c(17.38, -21.703))
+    st_point(c(17.37, -21.726)),
+    st_point(c(17.37, -21.777)),
+    st_point(c(17.37, -21.737)),
+    st_point(c(17.37, -21.788))
   )) %>% 
   st_as_sf(crs = proj)
 
 ## textboxes
 sf_textbox <- 
   tibble(lab = c(
-    "The Two Spatial Tactics of Male Cheetah",
-    "Fast facts:",
-    "• The cheetah is the rarest big cat in Africa\n• Last stronghold on farmlands in Namibia\n• Cheetahs are threatened by conflict with cattle farmers\n• Farmers lose calves to cheetahs\n• IZW conducts long-term research on cheetah movement\n• Communication hubs of cheetah were discovered.\n• Cheetah activity is highest in communication hubs\n• Communication hubs = conflict hotspots\n• Avoidance of hotspots reduces losses for farmers",
-    "Graphic: Cédric Scherer\nIcons: Stephanie Gendera\nData: IZW Cheetah Research Project",
-    "Publications: Melzheimer et al. (2018) Ecosphere; Melzheimer et al. (2020) PNAS"
+    "Solving the Cheetah-Farmer Conflict in Namibia","Rural central Namibia is one of the most important strongholds of the declining global\ncheetah population. Here, the rarest large African cat lives on privately owned farm-\nland. A traditional conflict poses a threat to them as they occasionally prey on cattle\ncalves. New insights into the cheetah’s spatial behaviour provide a viable solution\nto this human-wildlife conflict: “communication hubs” form hotspots of\ncheetah activity, leading to substantially less activity in the vast areas\nbetween the cores of the territories.",
+    "Scientists from the Cheetah Research Project, led by the\nLeibniz Institute for Zoo and Wildlife Research (IZW),\ndiscovered two interesting details of the cheetah's spatial\nbehaviour by collecting long-term movmenent data:\n\n(1) Cheetah males display two spatial tactics: floating\nindividuals roam over vast areas whereas territory holders\ndefend small core areas (Melzheimer et al. 2018 Ecosphere).\n\n(2) These core areas of male cheetah territories serve as\n“communication hubs” (Melzheimer et al. 2020 PNAS).\n\nImplementing this knowledge and moving their breeding\nherds with young calves out of the hotspots, farmers were\nable to reduce livestock losses by more than 80 percent.\n\nThe map illustrates the movement behaviour of three\nfloaters that regularly visit these communication hubs.\nAll of them frequently move into the “P Hub” during the\nperiod from 16 to 31 December 2020 (highlighted tracks).",
+    "Graphic: Cédric Scherer\nIcons: Stephanie Gendera\nData: Melzheimer et al. 2020 PNAS\n\nwww.cheetah-research.org"
   )) %>% 
   mutate(geom = st_sfc(
-    st_point(c(17.3, -21.59)),
-    st_point(c(17.89, -21.887)),
-    st_point(c(17.894, -21.907)),
-    st_point(c(17.3, -22.168)),
-    st_point(c(17.3, -22.19))
+    st_point(c(17.298, -21.587)),
+    st_point(c(17.298, -21.609)),
+    st_point(c(17.925, -21.868)),
+    st_point(c(17.298, -22.162))
   )) %>% 
   st_as_sf(crs = proj)
-#Hotspots of Cheetah Activity as a Key to Solving the Cheetah-Farmer Conflict in Namibia
 
+##  labels for scale bar
+sf_scale <-
+  tibble(lab = c("0", "10", "20", "30 km")) %>% 
+  mutate(geom = st_sfc(
+    st_point(c(17.875, -22.187)),
+    st_point(c(17.971, -22.187)),
+    st_point(c(18.067, -22.187)),
+    st_point(c(18.163, -22.187))
+  )) %>% 
+  st_as_sf(crs = proj)
+  
 ## background and main data (+ turn into trajectories)
 sf_all_line <-
   sf_floaters %>% 
@@ -340,28 +345,25 @@ overview <-
   ggplot() + 
     
     ## Hillshading -------------------------------------------------------------
-    stars::geom_stars(data = sf_hill_ov) +
-    stars::geom_stars(data = sf_slope_ov, alpha = .8) +
-    #scale_fill_gradient(high = "#f5e9d7", low = "#654619") + #BROWN for gradients (old)
-    #scale_fill_gradient(high = "#f5dfd6", low = "#652d19") + #REDISH for gradients
-    scale_fill_gradient(high = "#edc6b6", low = "#461f11") + # for rcarto
+    geom_stars(data = sf_hill_ov) +
+    geom_stars(data = sf_slope_ov, alpha = .8) +
+    #scale_fill_gradient(high = "#edc6b6", low = "#461f11") + # for rcarto
+    scale_fill_gradient(high = "#f5e9d7", low = "#654619") + #BROWN for gradient
     new_scale_fill() +
     
-    ## KDE95 Fill --------------------------------------------------------------
-    geom_sf(data = sf_kde95, fill = "grey30", color = NA, alpha = .33) + 
+    ## KDE Fills ---------------------------------------------------------------
+    geom_sf(data = sf_kde95, fill = "grey30", color = NA, alpha = .18) + 
     geom_sf(data = sf_kde50, fill = "#871a1a", color = NA, alpha = .66) + 
     
     ## KDEs Neighbouring Hubs Fill ---------------------------------------------
     geom_sf(data = sf_kde_neighb, fill = "#871a1a", color = NA, alpha = .4) +
   
     ## Tree Cover --------------------------------------------------------------
-    geom_stars(data = sf_tc, alpha = .27) +
-    rcartocolor::scale_fill_carto_c(palette = "Emrld") +
-    #geom_stars(data = sf_tc, alpha = .33) +
-    #scale_fill_gradient(low = "#347136", high = "#1b3b1c") + 
-    #geom_stars(data = sf_tc, alpha = .22) +
-    #scale_fill_gradient(low = "#214923", high = "#152e16") +
-  
+    #geom_stars(data = sf_tc, alpha = .25) +
+    #rcartocolor::scale_fill_carto_c(palette = "Emrld") +
+    geom_stars(data = sf_tc, alpha = .33) +
+    scale_fill_gradient(low = "#347136", high = "#1b3b1c") + 
+    
     ## Trajectories Outline ----------------------------------------------------
     geom_sf(color = "#edd8b8", size = 1.4) + 
     geom_sf(data = sf_highlight_line, color = "#edd8b8", size = 2.3) + 
@@ -377,10 +379,6 @@ overview <-
       data = sf_kde95 %>% st_buffer(dist = .0014), 
       fill = NA, color = "#35353566", size = 1.7
     ) + 
-    # geom_sf(
-    #   data = sf_kde50 %>% st_buffer(dist = .0013),
-    #   fill = NA, color = "#5c121266", size = 1.5
-    # ) +
     
     ## KDE95 Outline -----------------------------------------------------------
     geom_sf(data = sf_kde95, fill = NA, color = "grey25", size = .55) + #, linetype = "11"
@@ -389,7 +387,7 @@ overview <-
     geom_sf(data = sf_highlight_line, aes(color = id), size = .8) + 
   
     ## KDE50 Outline -----------------------------------------------------------
-    geom_sf(data = sf_kde50, color = "#871a1a", fill = NA, linetype = "11", size = .85) +
+    geom_sf(data = sf_kde50, color = "#871a1a", fill = NA, size = .9) +#linetype = "11", size = .85) +
   
     ## KDEs Neighbouring Hubs --------------------------------------------------
     geom_sf(data = sf_kde_neighb, color = "#871a1a", fill = NA, linetype = "13", size = .65) +
@@ -397,48 +395,45 @@ overview <-
     ## Legend ------------------------------------------------------------------
     geom_sf_text(
       data = sf_leg[1:2,], aes(label = lab),
-      family = "Lora", size = 6.2, color = "black", 
+      family = "Lora", size = 5, color = "black",
       fontface = "bold", hjust = 0
     ) +
     geom_sf_text(
         data = sf_leg[3:4,], aes(label = lab),
-        family = "Lora", size = 4, color = "black", 
-        fontface = "italic", hjust = 0, vjust = 1, lineheight = .9
+        family = "Lora", size = 3.6, color = "black",
+        fontface = "italic", hjust = 0, vjust = 1, lineheight = 1
       ) +
     
     ## Labels ------------------------------------------------------------------
     geom_sf_text(
-      data = sf_ind, 
-      aes(color = id, color = after_scale(darken(color, .12)), 
-          label = id),
+      data = sf_ind, aes(color = id, label = id),
       family = "Bebas Neue", size = 5.2
     ) +
     geom_sf_text(
       data = sf_hub[1,], aes(label = hub),
       family = "Bebas Neue", size = 6.2, color = "black", hjust = 0
     ) +
-    # geom_sf_text(
-    #   data = sf_hub[2,], aes(label = hub),
-    #   family = "Bebas Neue", size = 5.2, color = "#494949",
-    #   hjust = 0, show.legend = FALSE
-    # ) +
   
     ## Textboxes ---------------------------------------------------------------
+    ## -> Title
     geom_sf_text(
       data = sf_textbox[1,], aes(label = lab),
-      family = "Lora", size = 8.7, color = "black",
+      family = "Lora", size = 7, color = "black",
       fontface = "bold.italic", hjust = 0
     ) +
+    ## -> Introduction
     geom_sf_text(
       data = sf_textbox[2,], aes(label = lab),
-      family = "Lora", size = 5.6, color = "grey12",
-      fontface = "bold.italic", hjust = 0, vjust = 1
+      family = "Lora", size = 3.6, color = "black",
+      fontface = "italic", hjust = 0, vjust = 1, lineheight = 1.12
     ) +
+    ## -> Background Information
     geom_sf_text(
       data = sf_textbox[3,], aes(label = lab),
-      family = "Lora", size = 3.9, color = "grey12",
-      hjust = 0, vjust = 1, lineheight = 1.25
+      family = "Lora", size = 3.6, color = "black",
+      fontface = "italic", hjust = "outward", vjust = 1
     ) +
+    ## -> Cpation
     geom_sf_text(
       data = sf_textbox[4,], aes(label = lab),
       family = "Lora", size = 3.6, color = "black",
@@ -447,14 +442,17 @@ overview <-
     
     ## Scalebar ----------------------------------------------------------------
     annotation_scale(
-      location = "br", line_width = 1.3, 
-      width_hint = 0.4, height = unit(0.3, "cm"), 
-      pad_x = unit(0.5, "cm"), pad_y = unit(0.5, "cm"),
-      text_cex = 1.05, text_family = "Bebas Neue"
+      location = "br", line_width = 1.3, width_hint = 0.4, text_col = NA, 
+      height = unit(0.3, "cm"), pad_x = unit(0.6, "cm"), pad_y = unit(0.4, "cm")
+    ) +
+    ## -> Manual labels
+    geom_sf_text(
+      data = sf_scale, aes(label = lab),
+      family = "Bebas Neue", size = 4.2, color = "black", fontface = "bold"
     ) +
     
     ## Scales + Coordinate System ----------------------------------------------
-    coord_sf(expand = FALSE) + #, crs = map_proj
+    coord_sf(expand = FALSE) + 
     scale_x_continuous(
       breaks = seq(17.3, 18.1, by = .1),
       labels = c(glue("{format(seq(17.3, 18.1, by = .1), nsmall = 1)}°E")), 
@@ -466,12 +464,8 @@ overview <-
     ) +
     scale_color_manual(values = pal) +
     theme(legend.position = "none")
-  
-    ## OLD LEGEND
-    #scale_color_manual(values = pal, name = NULL) +
-    #guides(color = guide_legend(override.aes = list(size = 2.5))) +
-    #theme(legend.position = c(.095, .95))
 
+## Final map with icons
 overview_img <- 
   ggdraw(overview) +
     ## P Hub
@@ -487,83 +481,30 @@ overview_img <-
     ## floater
     draw_image(here("img", "gepard-floater1a.png"), x = .606, y = .435, 
                hjust = .5, vjust = .5, width = .049) +
-    draw_image(here("img", "gepard-floater1b.png"), x = .468, y = .394, 
+    draw_image(here("img", "gepard-floater1b.png"), x = .468, y = .393, 
                hjust = .5, vjust = .5, width = .049) +
     draw_image(here("img", "gepard-floater1c.png"), x = .78, y = .72, 
                hjust = .5, vjust = .5, width = .049) +
     ## legend
-    draw_image(here("img", "gepard-terri-main.png"), x = .15, y = .83, 
-               hjust = .5, vjust = .5, width = .074) +
-    draw_image(here("img", "gepard-floater1.png"), x = .146, y = .763, 
-               hjust = .5, vjust = .5, width = .062) +
-    ggsave(here::here("plots", "dev", glue("{format(Sys.time(), '%Y%m%d_%H%M%S')}_cheetah.pdf")), 
+    draw_image(here("img", "gepard-terri-main.png"), x = .142, y = .717,
+              hjust = .5, vjust = .5, width = .072) +
+    draw_image(here("img", "gepard-floater1.png"), x = .136, y = .644,
+              hjust = .5, vjust = .5, width = .059) +
+    ggsave(here::here("plots", glue("CheetahMap_gradient.pdf")), 
            width = 16, height = 12.2, device = cairo_pdf)
-```
-
-
-### Hub Map
-
-```{r map-P-hub}
-hub <- 
-  sf_highlight_line %>% 
-  ggplot() + 
-    
-  ## Hillshading -------------------------------------------------------------
-    stars::geom_stars(data = sf_hill_hub) +
-    stars::geom_stars(data = sf_slope_hub, alpha = .8) +
-    scale_fill_gradient(high = "#f5e9d7", low = "#b47e2d", guide = "none") + #845c21
-    new_scale_fill() +
-    
-    ## KDE95 Fill --------------------------------------------------------------
-    geom_sf(data = sf_kde95, fill = "grey40", color = NA, alpha = .2) + ##ead2ae
-  
-    ## Tree Cover --------------------------------------------------------------
-    geom_stars(data = sf_tc, alpha = .23) +
-    #rcartocolor::scale_fill_carto_c(palette = "Emrld", guide = "none") +
-    scale_fill_gradient(low = "#A5D6A7", high = "#1C5E1F", guide = "none") +  
-  
-    # Observations Outline ----------------------------------------------------
-    geom_sf(data = sf_highlight, color = "#edd8b8", size = 4.5) +
-  
-    ## Trajectories Outline ----------------------------------------------------
-    geom_sf(color = "#edd8b8", size = 2.7) +
-  
-    ## Trajectories ------------------------------------------------------------
-    geom_sf(color = "white", size = 1.4) +
-    geom_sf(aes(color = id), size = 1.4, alpha = .5) +
-  
-    ## Observations ------------------------------------------------------------
-    geom_sf(data = sf_highlight, aes(color = id), 
-            size = 2.2, shape = 21, fill = "#edd8b8", stroke = 1.4) +
-  
-    ## KDE95 Shadow ------------------------------------------------------------
-    geom_sf(
-      data = sf_kde50 %>% st_buffer(dist = .0005), 
-      fill = NA, color = "#49494966", size = 1.4
-    ) + #grey60
-    
-    ## KDE50 Outline -----------------------------------------------------------
-    geom_sf(data = sf_kde50, color = "black", fill = NA, linetype = "22", size = .7) +
-  
-    ## Trees -------------------------------------------------------------------
-    #geom_sf(data = sf_trees, shape = 5, color = "#006700", stroke = .4, size = 2) +
-  
-    ## Scales + Coordinate System ----------------------------------------------
-    coord_sf(expand = FALSE, xlim = c(17.71, 17.76), ylim = c(-21.838, -21.792)) + #, crs = map_proj) +
-    scale_x_continuous(limits = c(17.7, 17.77)) +
-    scale_y_continuous(limits = c(-21.85, -21.78)) +
-    scale_color_manual(values = pal) +
-    ggsave(here::here("plots", "dev", glue("{format(Sys.time(), '%Y%m%d_%H%M%S')}_cheetah.pdf")), 
-           width = 15, height = 15, device = cairo_pdf)
 ```
 
 
 ```{r convert-pdf}
 pdfs <- list.files(here("plots"), pattern = "*.pdf")
-setwd(here("plots"))
 for(pdf in pdfs) {
-    pdf_convert(pdf = here("plots", pdf),
-                format = "png", dpi = 300)
+  pdf_convert(pdf = glue::glue("{here('plots')}/{pdf}"),
+              filenames = glue::glue("{here('plots')}/{str_remove(pdf, '.pdf')}_hd.png"),
+              format = "png", dpi = 800)
+  
+  pdf_convert(pdf = glue::glue("{here('plots')}/{pdf}"), 
+              filenames = glue::glue("{here('plots')}/{str_remove(pdf, '.pdf')}_sd.png"),
+              format = "png", dpi = 100)
 }
 ```
 
