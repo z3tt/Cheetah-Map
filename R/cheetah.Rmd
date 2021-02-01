@@ -495,6 +495,63 @@ overview_img <-
 ```
 
 
+### Hub Map
+
+```{r map-P-hub}
+hub <- 
+  sf_highlight_line %>% 
+  ggplot() + 
+    
+  ## Hillshading -------------------------------------------------------------
+    geom_stars(data = sf_hill_hub) +
+    geom_stars(data = sf_slope_hub, alpha = .8) +
+    scale_fill_gradient(high = "#f5e9d7", low = "#b47e2d", guide = "none") + #845c21
+    new_scale_fill() +
+    
+    ## KDE95 Fill --------------------------------------------------------------
+    geom_sf(data = sf_kde95, fill = "grey40", color = NA, alpha = .2) + ##ead2ae
+  
+    ## Tree Cover --------------------------------------------------------------
+    geom_stars(data = sf_tc, alpha = .27) +
+    #rcartocolor::scale_fill_carto_c(palette = "Emrld", guide = "none") +
+    scale_fill_gradient(low = "#A5D6A7", high = "#1C5E1F", guide = "none") +  
+  
+    # Observations Outline ----------------------------------------------------
+    geom_sf(data = sf_highlight, color = "#edd8b8", size = 4.5) +
+  
+    ## Trajectories Outline ----------------------------------------------------
+    geom_sf(color = "#edd8b8", size = 2.7) +
+  
+    ## Trajectories ------------------------------------------------------------
+    geom_sf(color = "white", size = 1.4) +
+    geom_sf(aes(color = id), size = 1.4, alpha = .5) +
+  
+    ## Observations ------------------------------------------------------------
+    geom_sf(data = sf_highlight, aes(color = id), 
+            size = 2.2, shape = 21, fill = "#edd8b8", stroke = 1.4) +
+  
+    ## KDE95 Shadow ------------------------------------------------------------
+    geom_sf(
+      data = sf_kde50 %>% st_buffer(dist = .0005), 
+      fill = NA, color = "#49494966", size = 1.4
+    ) + #grey60
+    
+    ## KDE50 Outline -----------------------------------------------------------
+    geom_sf(data = sf_kde50, color = "black", fill = NA, linetype = "22", size = .7) +
+  
+    ## Trees -------------------------------------------------------------------
+    #geom_sf(data = sf_trees, shape = 5, color = "#006700", stroke = .4, size = 2) +
+  
+    ## Scales + Coordinate System ----------------------------------------------
+    coord_sf(expand = FALSE, xlim = c(17.71, 17.76), ylim = c(-21.838, -21.792)) + #, crs = map_proj) +
+    scale_x_continuous(limits = c(17.7, 17.77)) +
+    scale_y_continuous(limits = c(-21.85, -21.78)) +
+    scale_color_manual(values = pal) +
+    ggsave(here::here("plots", "dev", glue("{format(Sys.time(), '%Y%m%d_%H%M%S')}_cheetah.pdf")), 
+           width = 15, height = 15, device = cairo_pdf)
+```
+
+
 ```{r convert-pdf}
 pdfs <- list.files(here("plots"), pattern = "*.pdf")
 for(pdf in pdfs) {
