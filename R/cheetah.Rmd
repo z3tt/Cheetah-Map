@@ -87,13 +87,6 @@ sf_kde_neighb <-
 # kdes <- map_df(rev(seq(50, 95, by = 5)), vers)
 ```
 
-### Marking Trees
-
-```{r data-trees}
-## 1 marking trees
-sf_trees <- st_read(dsn = here("data", "1 marking trees", "mt_201022.shp")) %>% 
-  st_transform(crs = proj) 
-```
 
 ### Floaters
 
@@ -187,40 +180,6 @@ sf_slope_ov <-
   st_as_stars()
 ```
 
-```{r hillshade-hub}
-bbox_hub <- as(extent(17.7, 17.78, -21.84, -21.79), 'SpatialPolygons')
-crs(bbox_hub) <- crs(proj)
-
-file_hub <- here("data", "3 raster data", "dem_hub.tif")
-
-if(!file.exists(file_hub)) {
-  dem_hub <- get_elev_raster(locations = bbox_hub, z = 14, proj = proj)
-  dem_hub@data@values <- dem_hub@data@values * 10
-  writeRaster(dem_hub, file_hub)
-} else {
-  dem_hub <- raster(file_hub)
-}
-
-slope_hub <- terrain(dem_hub, opt = "slope", unit = "radians")
-aspect_hub <- terrain(dem_hub, opt = "aspect", unit = "radians")
-
-sf_hill_hub <-
-  hillShade(slope_hub, aspect_hub, 40, 270) %>%
-  aggregate(fact = 5, method = "bilinear") %>% 
-  focal(w = matrix(1/9, nc = 3, nr = 3), mean) %>% 
-  rasterToPoints() %>%
-  as_tibble() %>% 
-  st_as_stars()
-
-sf_slope_hub <-
-  slope_hub %>%
-  aggregate(fact = 5, method = "bilinear") %>%
-  rasterToPoints() %>%
-  as_tibble() %>%
-  ## invert the scale so that more slope is darker
-  mutate(slope = 1 - slope) %>% 
-  st_as_stars()
-```
 
 ### Tree Cover
 
@@ -305,7 +264,7 @@ sf_leg <-
 sf_textbox <- 
   tibble(lab = c(
     "Solving the Cheetah-Farmer Conflict in Namibia","Rural central Namibia is one of the most important strongholds of the declining global\ncheetah population. Here, the rarest large African cat lives on privately owned farm-\nland. A traditional conflict poses a threat to them as they occasionally prey on cattle\ncalves. New insights into the cheetah’s spatial behaviour provide a viable solution\nto this human-wildlife conflict: “communication hubs” form hotspots of\ncheetah activity, leading to substantially less activity in the vast areas\nbetween the cores of the territories.",
-    "Scientists from the Cheetah Research Project, led by the\nLeibniz Institute for Zoo and Wildlife Research (IZW),\ndiscovered two interesting details of the cheetah's spatial\nbehaviour by collecting long-term movmenent data:\n\n(1) Cheetah males display two spatial tactics: floating\nindividuals roam over vast areas whereas territory holders\ndefend small core areas (Melzheimer et al. 2018 Ecosphere).\n\n(2) These core areas of male cheetah territories serve as\n“communication hubs” (Melzheimer et al. 2020 PNAS).\n\nImplementing this knowledge and moving their breeding\nherds with young calves out of the hotspots, farmers were\nable to reduce livestock losses by more than 80 percent.\n\nThe map illustrates the movement behaviour of three\nfloaters that regularly visit these communication hubs.\nAll of them frequently move into the “P Hub” during the\nperiod from 16 to 31 December 2020 (highlighted tracks).",
+    "Scientists from the Cheetah Research Project, led by the\nLeibniz Institute for Zoo and Wildlife Research (IZW),\ndiscovered two interesting details of the cheetah's spatial\nbehaviour by collecting long-term movement data:\n\n(1) Cheetah males display two spatial tactics: floating\nindividuals roam over vast areas whereas territory holders\ndefend small core areas (Melzheimer et al. 2018 Ecosphere).\n\n(2) These core areas of male cheetah territories serve as\n“communication hubs” (Melzheimer et al. 2020 PNAS).\n\nImplementing this knowledge and moving their breeding\nherds with young calves out of the hotspots, farmers were\nable to reduce livestock losses by more than 80 percent.\n\nThe map illustrates the movement behaviour of three\nfloaters that regularly visit these communication hubs.\nAll of them frequently move into the “P Hub” during the\nperiod from 16 to 31 December 2020 (highlighted tracks).",
     "Graphic: Cédric Scherer\nIcons: Stephanie Gendera\nData: Melzheimer et al. 2020 PNAS\n\nwww.cheetah-research.org"
   )) %>% 
   mutate(geom = st_sfc(
@@ -339,8 +298,8 @@ overview <-
     ## Hillshading -------------------------------------------------------------
     geom_stars(data = sf_hill_ov) +
     geom_stars(data = sf_slope_ov, alpha = .8) +
-    scale_fill_gradient(high = "#edc6b6", low = "#461f11") + ## for rcarto
-    #scale_fill_gradient(high = "#f5e9d7", low = "#654619") + ## for gradient
+    #scale_fill_gradient(high = "#edc6b6", low = "#461f11") + ## for rcarto
+    scale_fill_gradient(high = "#f5e9d7", low = "#654619") + ## for gradient
     new_scale_fill() +
     
     ## KDE Fills ---------------------------------------------------------------
@@ -351,10 +310,10 @@ overview <-
     geom_sf(data = sf_kde_neighb, fill = "#871a1a", color = NA, alpha = .4) +
   
     ## Tree Cover --------------------------------------------------------------
-    geom_stars(data = sf_tc, alpha = .25) +
-    rcartocolor::scale_fill_carto_c(palette = "Emrld") +
-    #geom_stars(data = sf_tc, alpha = .33) +
-    #scale_fill_gradient(low = "#347136", high = "#1b3b1c") + 
+    #geom_stars(data = sf_tc, alpha = .25) +
+    #rcartocolor::scale_fill_carto_c(palette = "Emrld") +
+    geom_stars(data = sf_tc, alpha = .33) +
+    scale_fill_gradient(low = "#347136", high = "#1b3b1c") + 
     
     ## Trajectories Outline ----------------------------------------------------
     geom_sf(color = "#edd8b8", size = 1.4) + 
@@ -482,7 +441,7 @@ overview_img <-
               hjust = .5, vjust = .5, width = .072) +
     draw_image(here("img", "gepard-floater1.png"), x = .136, y = .644,
               hjust = .5, vjust = .5, width = .059) +
-    ggsave(here::here("plots", glue("CheetahMap_rcarto.pdf")), 
+    ggsave(here::here("plots", glue("CheetahMap_gradient.pdf")), 
            width = 16, height = 12.2, device = cairo_pdf)
 ```
 
