@@ -19,8 +19,6 @@ Quick Link
 [Portfolio]:https://data-vizard.com/
 [Behance]:https://www.behance.net/cedscherer
 
-<div align="center">
-
 My Contribution to the BES Movement "MoveMap" Competition 2021:
 
 ![](https://github.com/Z3tt/Cheetah-Map/blob/main/plots/CheetahMap_rcarto_hd.png)
